@@ -69,9 +69,20 @@ func (o *Orientation) UnmarshalText(text []byte) error {
 }
 
 type DesktopSession interface {
-	// Outputs() []Output
-	ScreenStates() []ScreenState
+	Resources() (Resources, error)
+	ScreenStates() ([]LogicalMonitor, error)
 	Apply(profile Profile, persistent bool) error
 	Close()
-	DebugInfo(output io.Writer)
+	DebugInfo(output io.Writer) error
+}
+
+// State is the output of the state command
+type State struct {
+	Monitors []LogicalMonitor `json:"monitors"`
+}
+
+// Resources is the output of the resources command
+type Resources struct {
+	// Monitors maps connector to connected physical monitors
+	Monitors map[string]PhysicalMonitor `json:"monitors"`
 }

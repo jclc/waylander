@@ -23,7 +23,7 @@ func Usage() {
 			"\n"+
 			"Commands:\n"+
 			"    help        Print this help message\n"+
-			"    info        Show currently connected outputs\n"+
+			"    resources   Show currently connected outputs\n"+
 			"    state       Show the current configuration\n"+
 			"    profiles    List saved profiles\n"+
 			"    save        Save current state as a profile\n"+
@@ -64,10 +64,10 @@ func Run() int {
 	switch cmd {
 	case "state":
 		return RunState(os.Args[1:])
+	case "resources":
+		return RunResources(os.Args[1:])
 	case "save":
 		return RunSave(os.Args[1:])
-	case "info":
-		return RunInfo(os.Args[1:])
 	case "debuginfo":
 		return RunDebugInfo(os.Args[1:])
 	}
@@ -91,17 +91,30 @@ func RunDebugInfo(args []string) int {
 	return 0
 }
 
-func RunInfo(args []string) int {
-	// session.Outputs()
-
+func RunResources(args []string) int {
+	res, err := session.Resources()
+	if err != nil {
+		fmt.Println("Error getting monitor resources:", err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(&res)
 	return 0
 }
 
 func RunState(args []string) int {
-	states := session.ScreenStates()
+	st, err := session.ScreenStates()
+	if err != nil {
+		fmt.Println("Error getting current monitor layout:", err)
+		return 1
+	}
+	state := common.State{
+		Monitors: st,
+	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(&states)
+	_ = enc.Encode(&state)
 	return 0
 }
 
@@ -139,8 +152,14 @@ func RunSave(args []string) int {
 
 	name := args[1]
 
+	monitors, err := session.ScreenStates()
+	if err != nil {
+		fmt.Println("Error getting current layout:", err)
+		return 1
+	}
+
 	profile := common.Profile{
-		Monitors: session.ScreenStates(),
+		Monitors: monitors,
 	}
 
 	file, err := os.Create(filepath.Join(common.GetConfigDir(), "profiles",

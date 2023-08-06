@@ -18,10 +18,6 @@ func GetDesktopSession() (common.DesktopSession, error) {
 		conn: conn,
 	}
 
-	if err = s.getResources(); err != nil {
-		return nil, err
-	}
-
 	return s, nil
 }
 
@@ -38,37 +34,61 @@ func (s *session) Close() {
 	}
 }
 
-func (s *session) Outputs() []common.Output {
-	var outputs []common.Output
-	for _, output := range s.res.Outputs {
-		modes := make([]common.Mode, 0, len(output.Modes))
-		for _, i := range output.Modes {
-			m := s.res.Modes[i]
-			modes = append(modes, common.Mode{
+func (s *session) Resources() (common.Resources, error) {
+	if err := s.getResources(); err != nil {
+		return common.Resources{}, err
+	}
+	if err := s.getState(); err != nil {
+		return common.Resources{}, err
+	}
+
+	res := common.Resources{
+		Monitors: map[string]common.PhysicalMonitor{},
+	}
+	for _, o := range s.res.Outputs {
+		mon := common.PhysicalMonitor{
+			Vendor:  o.Properties["vendor"].(string),
+			Product: o.Properties["product"].(string),
+			Serial:  o.Properties["serial"].(string),
+		}
+		mon.Modes = make([]common.Mode, 0, len(o.Modes))
+		for _, i := range o.Modes {
+			mon.Modes = append(mon.Modes, common.Mode{
 				Dimensions: common.Rect{
-					X: int(m.Width),
-					Y: int(m.Height),
+					X: int(s.res.Modes[i].Width),
+					Y: int(s.res.Modes[i].Height),
 				},
-				Frequency: m.Frequency,
+				Frequency: s.res.Modes[i].Frequency,
 			})
 		}
-		outputs = append(outputs, common.Output{
-			Connector: output.Name,
-			Screen: common.Screen{
-				Product: output.Properties["product"].(string),
-				Vendor:  output.Properties["vendor"].(string),
-				Serial:  output.Properties["serial"].(string),
-				Modes:   modes,
-			},
-		})
+		// Find preferred mode
+	preferredModeLoop:
+		for i := range s.st.Monitors {
+			if s.st.Monitors[i].Info.Connector != o.Name {
+				continue
+			}
+			for _, mode := range s.st.Monitors[i].Modes {
+				if isPreferred, found := mode.Properties["is-preferred"]; found && isPreferred.(bool) {
+					mon.PreferredMode = common.Mode{
+						Dimensions: common.Rect{
+							X: int(mode.Width),
+							Y: int(mode.Height),
+						},
+						Frequency: mode.RefreshRate,
+					}
+					break preferredModeLoop
+				}
+			}
+		}
+		res.Monitors[o.Name] = mon
 	}
-	return outputs
+	return res, nil
 }
 
-func (s *session) ScreenStates() []common.ScreenState {
+func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 	err := s.getState()
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 
 	physicalMonitors := map[string]monitor{}
@@ -83,7 +103,7 @@ func (s *session) ScreenStates() []common.ScreenState {
 		}
 	}
 
-	var states []common.ScreenState
+	var states []common.LogicalMonitor
 	for _, m := range s.st.LogicalMonitors {
 		inputs := make(map[string]common.Mode, len(m.Monitors))
 		for _, in := range m.Monitors {
@@ -97,7 +117,7 @@ func (s *session) ScreenStates() []common.ScreenState {
 			}
 		}
 
-		states = append(states, common.ScreenState{
+		states = append(states, common.LogicalMonitor{
 			Outputs: inputs,
 			Offset: common.Rect{
 				X: int(m.X),
@@ -108,7 +128,7 @@ func (s *session) ScreenStates() []common.ScreenState {
 			Primary:     m.Primary,
 		})
 	}
-	return states
+	return states, nil
 }
 
 func (s *session) Apply(profile common.Profile, persistent bool) error {
@@ -119,20 +139,24 @@ func (s *session) Apply(profile common.Profile, persistent bool) error {
 	return nil
 }
 
-func (s *session) DebugInfo(output io.Writer) {
+func (s *session) DebugInfo(output io.Writer) error {
 	err := s.getResources()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	err = s.getState()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	dg := struct {
+		Session   string
+		Serial    uint32
 		Resources resources
 		State     state
 	}{
+		Session:   "gnome",
+		Serial:    s.serial,
 		Resources: s.res,
 		State:     s.st,
 	}
@@ -141,8 +165,10 @@ func (s *session) DebugInfo(output io.Writer) {
 	enc.SetIndent("", "  ")
 	err = enc.Encode(dg)
 	if err != nil {
-		panic(err)
+		return err
 	}
+
+	return nil
 }
 
 func (s *session) getResources() error {
