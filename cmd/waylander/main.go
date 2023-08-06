@@ -29,6 +29,7 @@ func Usage() {
 			"    save        Save current state as a profile\n"+
 			"    apply       Apply a profile\n"+
 			"    edit        Edit profile\n"+
+			"    debuginfo   Print desktop session internal info\n"+
 			"", filepath.Base(os.Args[0]))
 }
 
@@ -66,9 +67,9 @@ func Run() int {
 	case "save":
 		return RunSave(os.Args[1:])
 	case "info":
-		return RunTest(os.Args[1:])
-	case "test":
-		return RunTest(os.Args[1:])
+		return RunInfo(os.Args[1:])
+	case "debuginfo":
+		return RunDebugInfo(os.Args[1:])
 	}
 
 	fmt.Printf("Invalid command '%s'\n", cmd)
@@ -85,25 +86,8 @@ func GetDesktopSession() (common.DesktopSession, error) {
 	return nil, fmt.Errorf("unsupported desktop session '%s'", session)
 }
 
-func RunTest(args []string) int {
-	if len(args) < 1 {
-		fmt.Println("ffjgnhbfkj")
-		return 1
-	}
-	var s struct {
-		R common.Rect
-	}
-	err := json.Unmarshal([]byte(`"2x-1"`), &s.R)
-	if err != nil {
-		fmt.Println("not good!!", err)
-	}
-
-	b, err := json.Marshal(s)
-	if err != nil {
-		fmt.Println("err was not nil:", err)
-	} else {
-		fmt.Println(string(b))
-	}
+func RunDebugInfo(args []string) int {
+	session.DebugInfo(os.Stdout)
 	return 0
 }
 

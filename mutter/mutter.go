@@ -1,7 +1,9 @@
 package mutter
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/jclc/waylander/common"
@@ -115,6 +117,32 @@ func (s *session) Apply(profile common.Profile, persistent bool) error {
 		return err
 	}
 	return nil
+}
+
+func (s *session) DebugInfo(output io.Writer) {
+	err := s.getResources()
+	if err != nil {
+		panic(err)
+	}
+	err = s.getState()
+	if err != nil {
+		panic(err)
+	}
+
+	dg := struct {
+		Resources resources
+		State     state
+	}{
+		Resources: s.res,
+		State:     s.st,
+	}
+
+	enc := json.NewEncoder(output)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(dg)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (s *session) getResources() error {

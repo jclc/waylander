@@ -1,6 +1,9 @@
 package common
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 type Orientation uint8
 
@@ -70,4 +73,5 @@ type DesktopSession interface {
 	ScreenStates() []ScreenState
 	Apply(profile Profile, persistent bool) error
 	Close()
+	DebugInfo(output io.Writer)
 }

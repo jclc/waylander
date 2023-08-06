@@ -3,54 +3,54 @@ package mutter
 // https://gitlab.gnome.org/GNOME/mutter/-/blob/main/data/dbus-interfaces/org.gnome.Mutter.DisplayConfig.xml
 
 type crtc struct {
-	ID               uint32         `dbus:"ID"`
-	WinsysID         int64          `dbus:"winsys_id"`
-	X                int32          `dbus:"x"`
-	Y                int32          `dbus:"y"`
-	Width            int32          `dbus:"width"`
-	Height           int32          `dbus:"height"`
-	CurrentMode      int32          `dbus:"current_mode"`
-	CurrentTransform uint32         `dbus:"current_transform"`
-	Transforms       []uint32       `dbus:"transforms"`
-	Properties       map[string]any `dbus:"properties"`
+	ID               uint32
+	WinsysID         int64
+	X                int32
+	Y                int32
+	Width            int32
+	Height           int32
+	CurrentMode      int32
+	CurrentTransform uint32
+	Transforms       []uint32
+	Properties       map[string]any
 }
 
 type output struct {
-	ID            uint32         `dbus:"ID"`
-	WinsysID      int64          `dbus:"winsys_id"`
-	CurrentCRTC   int32          `dbus:"current_crtc"`
-	PossibleCRTCs []uint32       `dbus:"possible_crtcs"`
-	Name          string         `dbus:"name"`
-	Modes         []uint32       `dbus:"modes"`
-	Clones        []uint32       `dbus:"clones"`
-	Properties    map[string]any `dbus:"properties"`
+	ID            uint32
+	WinsysID      int64
+	CurrentCRTC   int32
+	PossibleCRTCs []uint32
+	Name          string
+	Modes         []uint32
+	Clones        []uint32
+	Properties    map[string]any
 }
 
 type resMode struct {
-	ID        uint32  `dbus:"ID"`
-	WinsysID  int64   `dbus:"winsys_id"`
-	Width     uint32  `dbus:"width"`
-	Height    uint32  `dbus:"height"`
-	Frequency float64 `dbus:"frequency"`
-	Flags     uint32  `dbus:"flags"`
+	ID        uint32
+	WinsysID  int64
+	Width     uint32
+	Height    uint32
+	Frequency float64
+	Flags     uint32
 }
 
 type resources struct {
-	CRTCs           []crtc    `dbus:"crtcs"`
-	Outputs         []output  `dbus:"outputs"`
-	Modes           []resMode `dbus:"modes"`
-	MaxScreenWidth  uint32    `dbus:"max_screen_width"`
-	MaxScreenHeight uint32    `dbus:"max_screen_height"`
+	CRTCs           []crtc
+	Outputs         []output
+	Modes           []resMode
+	MaxScreenWidth  uint32
+	MaxScreenHeight uint32
 }
 
 type stMode struct {
-	ID              string         `dbus:"id"`
-	Width           int32          `dbus:"width"`
-	Height          int32          `dbus:"height"`
-	RefreshRate     float64        `dbus:"refresh_rate"`
-	PreferredScale  float64        `dbus:"preferred_scale"`
-	SupportedScales []float64      `dbus:"supported_scales"`
-	Properties      map[string]any `dbus:"properties"`
+	ID              string
+	Width           int32
+	Height          int32
+	RefreshRate     float64
+	PreferredScale  float64
+	SupportedScales []float64
+	Properties      map[string]any
 }
 
 type monitorInfo struct {
@@ -67,13 +67,13 @@ type monitor struct {
 }
 
 type logicalMonitor struct {
-	X          int32          `dbus:"x"`
-	Y          int32          `dbus:"y"`
-	Scale      float64        `dbus:"scale"`
-	Transform  uint32         `dbus:"transform"`
-	Primary    bool           `dbus:"primary"`
-	Monitors   []monitorInfo  `dbus:"monitors"`
-	Properties map[string]any `dbus:"properties"`
+	X          int32
+	Y          int32
+	Scale      float64
+	Transform  uint32
+	Primary    bool
+	Monitors   []monitorInfo
+	Properties map[string]any
 }
 
 type state struct {

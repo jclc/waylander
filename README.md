@@ -12,6 +12,7 @@ I'm not concerned with compatibility with older tools or trying to keep the tool
 - Gnome Wayland
 
 ## Todo list
+- [ ] Basic documentation
 - [ ] KDE support
 - [ ] GUI
 - [ ] Audio devices
