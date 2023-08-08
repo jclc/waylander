@@ -66,6 +66,21 @@ type monitor struct {
 	Properties map[string]any
 }
 
+// type applyOutput struct {
+// 	ID         uint32
+// 	Properties map[string]any
+// }
+
+// type applyCrtc struct {
+// 	ID         uint32
+// 	NewMode    int32
+// 	X          int32
+// 	Y          int32
+// 	Transform  uint32
+// 	Outputs    []uint32
+// 	Properties map[string]any
+// }
+
 type logicalMonitor struct {
 	X          int32
 	Y          int32
@@ -81,3 +96,27 @@ type state struct {
 	LogicalMonitors []logicalMonitor
 	Properties      map[string]any
 }
+
+type applyMonitor struct {
+	Connector  string
+	ModeID     string
+	Properties map[string]any
+}
+
+type applyLogicalMonitor struct {
+	X         int32
+	Y         int32
+	Scale     float64
+	Transform uint32
+	Primary   bool
+	Monitors  []applyMonitor
+	// Properties map[string]any
+}
+
+type applyMethod uint32
+
+const (
+	applyVerify     applyMethod = 0
+	applyTemporary  applyMethod = 1
+	applyPersistent applyMethod = 2
+)

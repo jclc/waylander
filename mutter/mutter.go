@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"slices"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/jclc/waylander/common"
+	"golang.org/x/exp/maps"
 )
+
+const epsilon = 0.005
 
 func GetDesktopSession() (common.DesktopSession, error) {
 	conn, err := dbus.SessionBus()
@@ -51,6 +56,7 @@ func (s *session) Resources() (common.Resources, error) {
 			Product: o.Properties["product"].(string),
 			Serial:  o.Properties["serial"].(string),
 		}
+
 		mon.Modes = make([]common.Mode, 0, len(o.Modes))
 		for _, i := range o.Modes {
 			mon.Modes = append(mon.Modes, common.Mode{
@@ -61,13 +67,17 @@ func (s *session) Resources() (common.Resources, error) {
 				Frequency: s.res.Modes[i].Frequency,
 			})
 		}
-		// Find preferred mode
+
 	preferredModeLoop:
-		for i := range s.st.Monitors {
-			if s.st.Monitors[i].Info.Connector != o.Name {
+		for _, m := range s.st.Monitors {
+			if m.Info.Connector != o.Name {
 				continue
 			}
-			for _, mode := range s.st.Monitors[i].Modes {
+
+			_, supportsVRR := m.Properties["is-vrr-allowed"]
+			mon.VRRSupported = supportsVRR
+
+			for _, mode := range m.Modes {
 				if isPreferred, found := mode.Properties["is-preferred"]; found && isPreferred.(bool) {
 					mon.PreferredMode = common.Mode{
 						Dimensions: common.Rect{
@@ -80,6 +90,7 @@ func (s *session) Resources() (common.Resources, error) {
 				}
 			}
 		}
+
 		res.Monitors[o.Name] = mon
 	}
 	return res, nil
@@ -91,10 +102,10 @@ func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 		return nil, err
 	}
 
-	physicalMonitors := map[string]monitor{}
+	// physicalMonitors := map[string]monitor{}
 	currentModes := map[string]stMode{}
 	for _, s := range s.st.Monitors {
-		physicalMonitors[s.Info.Connector] = s
+		// physicalMonitors[s.Info.Connector] = s
 		for _, m := range s.Modes {
 			if isCurrent, found := m.Properties["is-current"]; found && isCurrent.(bool) {
 				currentModes[s.Info.Connector] = m
@@ -128,14 +139,71 @@ func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 			Primary:     m.Primary,
 		})
 	}
+
 	return states, nil
 }
 
 func (s *session) Apply(profile common.Profile, persistent bool) error {
-	err := s.applyConfiguration(persistent, nil, nil)
+	err := s.getResources()
 	if err != nil {
 		return err
 	}
+	err = s.getState()
+	if err != nil {
+		return err
+	}
+
+	var outputMonitors []applyLogicalMonitor
+	for i, mon := range profile.Monitors {
+		connectors := maps.Keys(mon.Outputs)
+		slices.Sort(connectors)
+
+		if len(connectors) == 0 {
+			return fmt.Errorf("monitor #%d has no outputs", i)
+		} else if len(mon.Outputs) > 1 {
+			// When mirroring, all outputs must have the same dimensions
+			comp := mon.Outputs[connectors[0]]
+			for _, mode := range mon.Outputs {
+				if mode.Dimensions.X != comp.Dimensions.X ||
+					mode.Dimensions.Y != comp.Dimensions.Y {
+					return fmt.Errorf(
+						"cannot mirror outputs with different dimensions "+
+							"(%d,%d) and (%d,%d)",
+						comp.Dimensions.X, comp.Dimensions.Y,
+						mode.Dimensions.X, mode.Dimensions.Y)
+				}
+			}
+		}
+
+		// TODO: check for overlapping logical monitors
+
+		var monitors []applyMonitor
+		for _, connector := range connectors {
+			monitors = append(monitors, applyMonitor{
+				Connector: connector,
+				ModeID:    s.findModeID(connector, mon.Outputs[connector]),
+			})
+		}
+		outputMonitors = append(outputMonitors, applyLogicalMonitor{
+			X:         int32(mon.Offset.X),
+			Y:         int32(mon.Offset.Y),
+			Scale:     mon.Scale,
+			Transform: uint32(mon.Orientation),
+			Primary:   mon.Primary,
+			Monitors:  monitors,
+		})
+	}
+
+	method := applyTemporary
+	if persistent {
+		method = applyVerify
+	}
+
+	err = s.applyMonitorsConfig(method, outputMonitors, nil)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -171,6 +239,34 @@ func (s *session) DebugInfo(output io.Writer) error {
 	return nil
 }
 
+func (s *session) findModeID(connector string, mode common.Mode) string {
+	for _, monitor := range s.st.Monitors {
+		if monitor.Info.Connector != connector {
+			continue
+		}
+
+		for _, m := range monitor.Modes {
+			if int(m.Width) == mode.Dimensions.X &&
+				int(m.Height) == mode.Dimensions.Y &&
+				math.Abs(mode.Frequency-m.RefreshRate) < epsilon {
+				return m.ID
+			}
+		}
+	}
+
+	panic("mode not found for " + connector)
+}
+
+func (s *session) findOutputID(connector string) (uint32, error) {
+	for _, output := range s.res.Outputs {
+		if output.Name == connector {
+			return output.ID, nil
+		}
+	}
+
+	return 0, fmt.Errorf("no output %s", connector)
+}
+
 func (s *session) getResources() error {
 	obj := s.conn.Object(
 		"org.gnome.Mutter.DisplayConfig",
@@ -200,13 +296,13 @@ func (s *session) getState() error {
 	return nil
 }
 
-func (s *session) applyConfiguration(persistent bool, crtcs []crtc, outputs []crtc) error {
+func (s *session) applyMonitorsConfig(method applyMethod, logicalMonitors []applyLogicalMonitor, properties map[string]any) error {
 	obj := s.conn.Object(
 		"org.gnome.Mutter.DisplayConfig",
 		"/org/gnome/Mutter/DisplayConfig")
 
-	err := obj.Call("org.gnome.Mutter.DisplayConfig.ApplyConfiguration", 0,
-		s.serial, persistent, crtcs, outputs).Err
+	err := obj.Call("org.gnome.Mutter.DisplayConfig.ApplyMonitorsConfig", 0,
+		s.serial, method, logicalMonitors, properties).Err
 	if err != nil {
 		return fmt.Errorf("failed to call Mutter d-bus API: %w", err)
 	}

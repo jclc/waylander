@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-const epsilon = 0.001 // for comparing floats
+const epsilon = 0.005 // for comparing floats
 
 type Mode struct {
 	Dimensions Rect    `json:"dimensions"`
@@ -37,17 +37,17 @@ func ModesEqual(a, b Mode) bool {
 		math.Abs(a.Frequency-b.Frequency) < epsilon
 }
 
-type Screen struct {
-	Vendor  string `json:"vendor"`
-	Product string `json:"product"`
-	Serial  string `json:"serial"`
-	Modes   []Mode `json:"-"`
-}
+// type Screen struct {
+// 	Vendor  string `json:"vendor"`
+// 	Product string `json:"product"`
+// 	Serial  string `json:"serial"`
+// 	Modes   []Mode `json:"-"`
+// }
 
-type Output struct {
-	Connector string
-	Screen    Screen
-}
+// type Output struct {
+// 	Connector string
+// 	Screen    Screen
+// }
 
 // LogicalMonitor represents one logical monitor. It can have one or more
 // physical monitors as its outputs, in which case the same logical monitor is
@@ -58,6 +58,7 @@ type LogicalMonitor struct {
 	Orientation Orientation     `json:"orientation"`
 	Offset      Rect            `json:"offset"`
 	Primary     bool            `json:"primary"`
+	VRREnabled  bool            `json:"vrr_enabled"` // variable refresh rate
 }
 
 // PhysicalMonitor represents one connected physical monitor output.
@@ -67,6 +68,7 @@ type PhysicalMonitor struct {
 	Serial        string `json:"serial"`
 	PreferredMode Mode   `json:"preferred_mode"`
 	Modes         []Mode `json:"modes"`
+	VRRSupported  bool   `json:"vrr_supported"` // variable refresh rate
 }
 
 // Profile represents a complete monitor layout.

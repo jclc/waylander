@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 
 	"github.com/jclc/waylander/common"
 	"github.com/jclc/waylander/mutter"
@@ -22,14 +23,15 @@ func Usage() {
 		"Usage: %s <command> [args...]\n"+
 			"\n"+
 			"Commands:\n"+
-			"    help        Print this help message\n"+
-			"    resources   Show currently connected outputs\n"+
-			"    state       Show the current configuration\n"+
-			"    profiles    List saved profiles\n"+
-			"    save        Save current state as a profile\n"+
-			"    apply       Apply a profile\n"+
-			"    edit        Edit profile\n"+
-			"    debuginfo   Print desktop session internal info\n"+
+			"    help              Print this help message\n"+
+			"    resources         Show currently connected outputs\n"+
+			"    state             Show the current configuration\n"+
+			"    profiles          List saved profiles\n"+
+			"    save <profile>    Save current state as a profile\n"+
+			"    show <profile>    Show profile\n"+
+			"    apply <profile>   Apply profile\n"+
+			"    edit <profile>    Edit profile\n"+
+			"    debuginfo         Print desktop session internal info\n"+
 			"", filepath.Base(os.Args[0]))
 }
 
@@ -48,6 +50,8 @@ func Run() int {
 	switch cmd {
 	case "profiles":
 		return RunProfiles(os.Args[1:])
+	case "show":
+		return RunShow(os.Args[1:])
 	case "edit":
 		return RunEdit(os.Args[1:])
 	}
@@ -66,6 +70,8 @@ func Run() int {
 		return RunState(os.Args[1:])
 	case "resources":
 		return RunResources(os.Args[1:])
+	case "apply":
+		return RunApply(os.Args[1:])
 	case "save":
 		return RunSave(os.Args[1:])
 	case "debuginfo":
@@ -84,6 +90,29 @@ func GetDesktopSession() (common.DesktopSession, error) {
 		return mutter.GetDesktopSession()
 	}
 	return nil, fmt.Errorf("unsupported desktop session '%s'", session)
+}
+
+func getProfilePath(name string) string {
+	return filepath.Join(common.GetConfigDir(), "profiles",
+		fmt.Sprintf("%s.json", name))
+}
+
+func getProfiles() []string {
+	files, err := os.ReadDir(filepath.Join(common.GetConfigDir(), "profiles"))
+	if err != nil {
+		fmt.Println("Error reading profiles:", err)
+		os.Exit(1)
+	}
+
+	profiles := make([]string, 0, len(files))
+	for _, f := range files {
+		if f.IsDir() || filepath.Ext(f.Name()) != ".json" || len(f.Name()) <= 5 {
+			continue
+		}
+		profiles = append(profiles, f.Name()[:len(f.Name())-5])
+	}
+
+	return profiles
 }
 
 func RunDebugInfo(args []string) int {
@@ -119,19 +148,7 @@ func RunState(args []string) int {
 }
 
 func RunProfiles(args []string) int {
-	files, err := os.ReadDir(filepath.Join(common.GetConfigDir(), "profiles"))
-	if err != nil {
-		fmt.Println("Error reading profiles:", err)
-		return 1
-	}
-
-	profiles := make([]string, 0, len(files))
-	for _, f := range files {
-		if f.IsDir() || filepath.Ext(f.Name()) != ".json" || len(f.Name()) <= 5 {
-			continue
-		}
-		profiles = append(profiles, f.Name()[:len(f.Name())-5])
-	}
+	profiles := getProfiles()
 
 	if len(profiles) == 0 {
 		fmt.Println("No saved profiles")
@@ -145,12 +162,10 @@ func RunProfiles(args []string) int {
 }
 
 func RunSave(args []string) int {
-	if len(args) != 2 {
+	if len(args) != 2 || args[1] == "" {
 		fmt.Println("Give the profile a name")
 		return 1
 	}
-
-	name := args[1]
 
 	monitors, err := session.ScreenStates()
 	if err != nil {
@@ -162,8 +177,7 @@ func RunSave(args []string) int {
 		Monitors: monitors,
 	}
 
-	file, err := os.Create(filepath.Join(common.GetConfigDir(), "profiles",
-		fmt.Sprintf("%s.json", name)))
+	file, err := os.Create(getProfilePath(args[1]))
 	if err != nil {
 		fmt.Println("Error creating profile:", err)
 		return 1
@@ -181,6 +195,23 @@ func RunSave(args []string) int {
 	return 0
 }
 
+func RunShow(args []string) int {
+	if !slices.Contains(getProfiles(), args[1]) {
+		fmt.Printf("Profile '%s' does not exist\n", args[1])
+		return 1
+	}
+
+	profileData, err := os.ReadFile(getProfilePath(args[1]))
+	if err != nil {
+		fmt.Println("Error reading profile:", err)
+		return 1
+	}
+
+	fmt.Print(string(profileData))
+
+	return 0
+}
+
 func RunEdit(args []string) int {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
@@ -193,16 +224,46 @@ func RunEdit(args []string) int {
 		return 1
 	}
 
-	fp := filepath.Join(common.GetConfigDir(), "profiles",
-		fmt.Sprintf("%s.json", args[1]))
-
-	cmd := exec.Command(editor, fp)
+	cmd := exec.Command(editor, getProfilePath(args[1]))
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	err := cmd.Run()
 	if err != nil {
 		fmt.Println("Error running editor:", err)
+		return 1
+	}
+
+	return 0
+}
+
+func RunApply(args []string) int {
+	if len(args) != 2 {
+		fmt.Println("Specify which profile to apply")
+		return 1
+	}
+
+	if !slices.Contains(getProfiles(), args[1]) {
+		fmt.Printf("Profile '%s' does not exist\n", args[1])
+		return 1
+	}
+
+	profileData, err := os.ReadFile(getProfilePath(args[1]))
+	if err != nil {
+		fmt.Println("Error reading profile:", err)
+		return 1
+	}
+
+	var profile common.Profile
+	err = json.Unmarshal(profileData, &profile)
+	if err != nil {
+		fmt.Println("Error parsing profile:", err)
+		return 1
+	}
+
+	err = session.Apply(profile, false)
+	if err != nil {
+		fmt.Println("Error applying profile:", err)
 		return 1
 	}
 

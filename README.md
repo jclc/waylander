@@ -13,6 +13,7 @@ I'm not concerned with compatibility with older tools or trying to keep the tool
 
 ## Todo list
 - [ ] Basic documentation
+- [ ] Ensure cloning works properly
 - [ ] KDE support
 - [ ] GUI
 - [ ] Audio devices
