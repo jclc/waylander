@@ -1,6 +1,13 @@
 package common
 
-import "fmt"
+import (
+	"cmp"
+	"fmt"
+	"math"
+	"slices"
+
+	"golang.org/x/exp/constraints"
+)
 
 type Rect struct {
 	X int
@@ -41,4 +48,11 @@ func (r *Rect) UnmarshalText(text []byte) error {
 	}
 	*r = s
 	return nil
+}
+
+// Closest find the closest number in slice to the requested number
+func Closest[F constraints.Float | constraints.Integer](scales []F, wanted F) F {
+	return slices.MinFunc(scales, func(a, b F) int {
+		return cmp.Compare(math.Abs(float64(wanted-a)), math.Abs(float64(wanted-b)))
+	})
 }

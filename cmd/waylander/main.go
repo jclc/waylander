@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,21 +18,23 @@ var (
 )
 
 func Usage() {
-	fmt.Println("Waylander -- a screen management tool.")
+	fmt.Println("Waylander -- a Wayland screen management tool.")
 	fmt.Println()
 	fmt.Printf(
 		"Usage: %s <command> [args...]\n"+
 			"\n"+
 			"Commands:\n"+
-			"    help              Print this help message\n"+
-			"    resources         Show currently connected outputs\n"+
-			"    state             Show the current configuration\n"+
-			"    profiles          List saved profiles\n"+
-			"    save <profile>    Save current state as a profile\n"+
-			"    show <profile>    Show profile\n"+
-			"    apply <profile>   Apply profile\n"+
-			"    edit <profile>    Edit profile\n"+
-			"    debuginfo         Print desktop session internal info\n"+
+			"    help                     Print this help message\n"+
+			"    resources                Show currently connected outputs\n"+
+			"    state                    Show the current configuration\n"+
+			"    profiles                 List saved profiles\n"+
+			"    save <profile>           Save current state as a profile\n"+
+			"    show <profile>           Show profile\n"+
+			"    apply [opts] <profile>   Apply profile\n"+
+			"      -persist               Make profile persistent\n"+
+			"      -verify                Ask for confirmation\n"+
+			"    edit <profile>           Edit profile\n"+
+			"    debuginfo                Print desktop session internal info\n"+
 			"", filepath.Base(os.Args[0]))
 }
 
@@ -49,11 +52,11 @@ func Run() int {
 	// Commands that don't require a desktop session
 	switch cmd {
 	case "profiles":
-		return RunProfiles(os.Args[1:])
+		return RunProfiles(os.Args[2:])
 	case "show":
-		return RunShow(os.Args[1:])
+		return RunShow(os.Args[2:])
 	case "edit":
-		return RunEdit(os.Args[1:])
+		return RunEdit(os.Args[2:])
 	}
 
 	var err error
@@ -67,15 +70,15 @@ func Run() int {
 	// Commands that require a desktop session
 	switch cmd {
 	case "state":
-		return RunState(os.Args[1:])
+		return RunState(os.Args[2:])
 	case "resources":
-		return RunResources(os.Args[1:])
+		return RunResources(os.Args[2:])
 	case "apply":
-		return RunApply(os.Args[1:])
+		return RunApply(os.Args[2:])
 	case "save":
-		return RunSave(os.Args[1:])
+		return RunSave(os.Args[2:])
 	case "debuginfo":
-		return RunDebugInfo(os.Args[1:])
+		return RunDebugInfo(os.Args[2:])
 	}
 
 	fmt.Printf("Invalid command '%s'\n", cmd)
@@ -116,7 +119,11 @@ func getProfiles() []string {
 }
 
 func RunDebugInfo(args []string) int {
-	session.DebugInfo(os.Stdout)
+	err := session.DebugInfo(os.Stdout)
+	if err != nil {
+		fmt.Printf("Error getting debug info: %s", err)
+		return 1
+	}
 	return 0
 }
 
@@ -162,7 +169,7 @@ func RunProfiles(args []string) int {
 }
 
 func RunSave(args []string) int {
-	if len(args) != 2 || args[1] == "" {
+	if len(args) != 1 || args[0] == "" {
 		fmt.Println("Give the profile a name")
 		return 1
 	}
@@ -177,7 +184,7 @@ func RunSave(args []string) int {
 		Monitors: monitors,
 	}
 
-	file, err := os.Create(getProfilePath(args[1]))
+	file, err := os.Create(getProfilePath(args[0]))
 	if err != nil {
 		fmt.Println("Error creating profile:", err)
 		return 1
@@ -196,12 +203,17 @@ func RunSave(args []string) int {
 }
 
 func RunShow(args []string) int {
-	if !slices.Contains(getProfiles(), args[1]) {
-		fmt.Printf("Profile '%s' does not exist\n", args[1])
+	if len(args) == 0 {
+		fmt.Println("Specify a profile to show")
 		return 1
 	}
 
-	profileData, err := os.ReadFile(getProfilePath(args[1]))
+	if !slices.Contains(getProfiles(), args[0]) {
+		fmt.Printf("Profile '%s' does not exist\n", args[0])
+		return 1
+	}
+
+	profileData, err := os.ReadFile(getProfilePath(args[0]))
 	if err != nil {
 		fmt.Println("Error reading profile:", err)
 		return 1
@@ -219,12 +231,12 @@ func RunEdit(args []string) int {
 		return 1
 	}
 
-	if len(args) != 2 {
+	if len(args) != 1 {
 		fmt.Println("Specify which profile to edit")
 		return 1
 	}
 
-	cmd := exec.Command(editor, getProfilePath(args[1]))
+	cmd := exec.Command(editor, getProfilePath(args[0]))
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -238,17 +250,30 @@ func RunEdit(args []string) int {
 }
 
 func RunApply(args []string) int {
-	if len(args) != 2 {
+	set := flag.NewFlagSet("", flag.ContinueOnError)
+	var verify, persist bool
+	set.BoolVar(&persist, "persist", false,
+		"Make profile persistent")
+	set.BoolVar(&verify, "verify", false,
+		"Ask for confirmation")
+
+	err := set.Parse(args)
+	if err != nil {
+		return 1
+	}
+	args = set.Args()
+
+	if len(args) != 1 {
 		fmt.Println("Specify which profile to apply")
 		return 1
 	}
 
-	if !slices.Contains(getProfiles(), args[1]) {
-		fmt.Printf("Profile '%s' does not exist\n", args[1])
+	if !slices.Contains(getProfiles(), args[0]) {
+		fmt.Printf("Profile '%s' does not exist\n", args[0])
 		return 1
 	}
 
-	profileData, err := os.ReadFile(getProfilePath(args[1]))
+	profileData, err := os.ReadFile(getProfilePath(args[0]))
 	if err != nil {
 		fmt.Println("Error reading profile:", err)
 		return 1
@@ -261,7 +286,7 @@ func RunApply(args []string) int {
 		return 1
 	}
 
-	err = session.Apply(profile, false)
+	err = session.Apply(profile, verify, persist)
 	if err != nil {
 		fmt.Println("Error applying profile:", err)
 		return 1

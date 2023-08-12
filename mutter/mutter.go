@@ -29,7 +29,6 @@ func GetDesktopSession() (common.DesktopSession, error) {
 type session struct {
 	conn   *dbus.Conn
 	serial uint32
-	res    resources
 	st     state
 }
 
@@ -40,9 +39,6 @@ func (s *session) Close() {
 }
 
 func (s *session) Resources() (common.Resources, error) {
-	if err := s.getResources(); err != nil {
-		return common.Resources{}, err
-	}
 	if err := s.getState(); err != nil {
 		return common.Resources{}, err
 	}
@@ -50,48 +46,38 @@ func (s *session) Resources() (common.Resources, error) {
 	res := common.Resources{
 		Monitors: map[string]common.PhysicalMonitor{},
 	}
-	for _, o := range s.res.Outputs {
+	for _, o := range s.st.Monitors {
 		mon := common.PhysicalMonitor{
-			Vendor:  o.Properties["vendor"].(string),
-			Product: o.Properties["product"].(string),
-			Serial:  o.Properties["serial"].(string),
+			Vendor:  o.Info.Vendor,
+			Product: o.Info.Product,
+			Serial:  o.Info.Serial,
 		}
 
 		mon.Modes = make([]common.Mode, 0, len(o.Modes))
-		for _, i := range o.Modes {
-			mon.Modes = append(mon.Modes, common.Mode{
+		for _, mode := range o.Modes {
+			newMode := common.Mode{
 				Dimensions: common.Rect{
-					X: int(s.res.Modes[i].Width),
-					Y: int(s.res.Modes[i].Height),
+					X: int(mode.Width),
+					Y: int(mode.Height),
 				},
-				Frequency: s.res.Modes[i].Frequency,
-			})
-		}
-
-	preferredModeLoop:
-		for _, m := range s.st.Monitors {
-			if m.Info.Connector != o.Name {
-				continue
+				Frequency: mode.RefreshRate,
 			}
+			mon.Modes = append(mon.Modes, newMode)
 
-			_, supportsVRR := m.Properties["is-vrr-allowed"]
-			mon.VRRSupported = supportsVRR
-
-			for _, mode := range m.Modes {
-				if isPreferred, found := mode.Properties["is-preferred"]; found && isPreferred.(bool) {
-					mon.PreferredMode = common.Mode{
-						Dimensions: common.Rect{
-							X: int(mode.Width),
-							Y: int(mode.Height),
-						},
-						Frequency: mode.RefreshRate,
-					}
-					break preferredModeLoop
+			if isPreferred, found := mode.Properties["is-preferred"]; found {
+				if is, ok := isPreferred.(bool); ok && is {
+					mon.PreferredMode = newMode
 				}
 			}
 		}
 
-		res.Monitors[o.Name] = mon
+		if supportsVRR, found := o.Properties["is-vrr-allowed"]; found {
+			if does, ok := supportsVRR.(bool); ok && does {
+				mon.VRRSupported = true
+			}
+		}
+
+		res.Monitors[o.Info.Connector] = mon
 	}
 	return res, nil
 }
@@ -102,10 +88,8 @@ func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 		return nil, err
 	}
 
-	// physicalMonitors := map[string]monitor{}
 	currentModes := map[string]stMode{}
 	for _, s := range s.st.Monitors {
-		// physicalMonitors[s.Info.Connector] = s
 		for _, m := range s.Modes {
 			if isCurrent, found := m.Properties["is-current"]; found && isCurrent.(bool) {
 				currentModes[s.Info.Connector] = m
@@ -143,12 +127,8 @@ func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 	return states, nil
 }
 
-func (s *session) Apply(profile common.Profile, persistent bool) error {
-	err := s.getResources()
-	if err != nil {
-		return err
-	}
-	err = s.getState()
+func (s *session) Apply(profile common.Profile, verify, persistent bool) error {
+	err := s.getState()
 	if err != nil {
 		return err
 	}
@@ -178,16 +158,20 @@ func (s *session) Apply(profile common.Profile, persistent bool) error {
 		// TODO: check for overlapping logical monitors
 
 		var monitors []applyMonitor
+		var scale float64
 		for _, connector := range connectors {
+			var id string
+			id, scale = s.findModeID(connector, mon.Outputs[connector], mon.Scale)
+
 			monitors = append(monitors, applyMonitor{
 				Connector: connector,
-				ModeID:    s.findModeID(connector, mon.Outputs[connector]),
+				ModeID:    id,
 			})
 		}
 		outputMonitors = append(outputMonitors, applyLogicalMonitor{
 			X:         int32(mon.Offset.X),
 			Y:         int32(mon.Offset.Y),
-			Scale:     mon.Scale,
+			Scale:     scale,
 			Transform: uint32(mon.Orientation),
 			Primary:   mon.Primary,
 			Monitors:  monitors,
@@ -195,38 +179,39 @@ func (s *session) Apply(profile common.Profile, persistent bool) error {
 	}
 
 	method := applyTemporary
-	if persistent {
-		method = applyVerify
+	if verify {
+		// this is a GNOME oddity
+		method = applyPersistent
 	}
 
 	err = s.applyMonitorsConfig(method, outputMonitors, nil)
 	if err != nil {
 		return err
 	}
+	if persistent {
+		err = s.applyMonitorsConfig(applyPersistent, outputMonitors, nil)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
 func (s *session) DebugInfo(output io.Writer) error {
-	err := s.getResources()
-	if err != nil {
-		return err
-	}
-	err = s.getState()
+	err := s.getState()
 	if err != nil {
 		return err
 	}
 
 	dg := struct {
-		Session   string
-		Serial    uint32
-		Resources resources
-		State     state
+		Session string
+		Serial  uint32
+		State   state
 	}{
-		Session:   "gnome",
-		Serial:    s.serial,
-		Resources: s.res,
-		State:     s.st,
+		Session: "gnome",
+		Serial:  s.serial,
+		State:   s.st,
 	}
 
 	enc := json.NewEncoder(output)
@@ -239,7 +224,8 @@ func (s *session) DebugInfo(output io.Writer) error {
 	return nil
 }
 
-func (s *session) findModeID(connector string, mode common.Mode) string {
+func (s *session) findModeID(connector string, mode common.Mode, scale float64) (string, float64) {
+	var best stMode
 	for _, monitor := range s.st.Monitors {
 		if monitor.Info.Connector != connector {
 			continue
@@ -247,65 +233,22 @@ func (s *session) findModeID(connector string, mode common.Mode) string {
 
 		for _, m := range monitor.Modes {
 			if int(m.Width) == mode.Dimensions.X &&
-				int(m.Height) == mode.Dimensions.Y &&
-				math.Abs(mode.Frequency-m.RefreshRate) < epsilon {
-				return m.ID
+				int(m.Height) == mode.Dimensions.Y {
+				// Choose the mode whose refresh rate best matches
+				// the requested frequency
+				curDelta := math.Abs(mode.Frequency - best.RefreshRate)
+				newDelta := math.Abs(mode.Frequency - m.RefreshRate)
+				if newDelta < curDelta {
+					best = m
+				}
 			}
 		}
 	}
-
-	panic("mode not found for " + connector)
-}
-
-func (s *session) findOutputID(connector string) (uint32, error) {
-	for _, output := range s.res.Outputs {
-		if output.Name == connector {
-			return output.ID, nil
-		}
+	if math.Abs(best.RefreshRate-mode.Frequency) > common.MaxAllowedFrequencyDeviation {
+		panic(fmt.Sprintf("no matching mode %s found for %s", mode, connector))
 	}
 
-	return 0, fmt.Errorf("no output %s", connector)
-}
+	newScale := common.Closest(best.SupportedScales, scale)
 
-func (s *session) getResources() error {
-	obj := s.conn.Object(
-		"org.gnome.Mutter.DisplayConfig",
-		"/org/gnome/Mutter/DisplayConfig")
-
-	err := obj.Call("org.gnome.Mutter.DisplayConfig.GetResources", 0).Store(
-		&s.serial, &s.res.CRTCs, &s.res.Outputs,
-		&s.res.Modes, &s.res.MaxScreenWidth, &s.res.MaxScreenHeight)
-	if err != nil {
-		return fmt.Errorf("failed to call Mutter d-bus API: %w", err)
-	}
-
-	return nil
-}
-
-func (s *session) getState() error {
-	obj := s.conn.Object(
-		"org.gnome.Mutter.DisplayConfig",
-		"/org/gnome/Mutter/DisplayConfig")
-
-	err := obj.Call("org.gnome.Mutter.DisplayConfig.GetCurrentState", 0).Store(
-		&s.serial, &s.st.Monitors, &s.st.LogicalMonitors, &s.st.Properties)
-	if err != nil {
-		return fmt.Errorf("failed to call Mutter d-bus API: %w", err)
-	}
-
-	return nil
-}
-
-func (s *session) applyMonitorsConfig(method applyMethod, logicalMonitors []applyLogicalMonitor, properties map[string]any) error {
-	obj := s.conn.Object(
-		"org.gnome.Mutter.DisplayConfig",
-		"/org/gnome/Mutter/DisplayConfig")
-
-	err := obj.Call("org.gnome.Mutter.DisplayConfig.ApplyMonitorsConfig", 0,
-		s.serial, method, logicalMonitors, properties).Err
-	if err != nil {
-		return fmt.Errorf("failed to call Mutter d-bus API: %w", err)
-	}
-
-	return nil
+	return best.ID, newScale
 }

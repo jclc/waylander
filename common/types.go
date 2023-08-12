@@ -71,7 +71,7 @@ func (o *Orientation) UnmarshalText(text []byte) error {
 type DesktopSession interface {
 	Resources() (Resources, error)
 	ScreenStates() ([]LogicalMonitor, error)
-	Apply(profile Profile, persistent bool) error
+	Apply(profile Profile, verify, persistent bool) error
 	Close()
 	DebugInfo(output io.Writer) error
 }

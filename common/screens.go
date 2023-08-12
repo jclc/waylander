@@ -5,7 +5,10 @@ import (
 	"math"
 )
 
-const epsilon = 0.005 // for comparing floats
+const (
+	MaxAllowedFrequencyDeviation = 0.01
+	Epsilon                      = 0.005 // for comparing floats
+)
 
 type Mode struct {
 	Dimensions Rect    `json:"dimensions"`
@@ -34,20 +37,8 @@ func (m *Mode) UnmarshalText(text []byte) error {
 
 func ModesEqual(a, b Mode) bool {
 	return a.Dimensions.Eq(b.Dimensions) &&
-		math.Abs(a.Frequency-b.Frequency) < epsilon
+		math.Abs(a.Frequency-b.Frequency) < Epsilon
 }
-
-// type Screen struct {
-// 	Vendor  string `json:"vendor"`
-// 	Product string `json:"product"`
-// 	Serial  string `json:"serial"`
-// 	Modes   []Mode `json:"-"`
-// }
-
-// type Output struct {
-// 	Connector string
-// 	Screen    Screen
-// }
 
 // LogicalMonitor represents one logical monitor. It can have one or more
 // physical monitors as its outputs, in which case the same logical monitor is
