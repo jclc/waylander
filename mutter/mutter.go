@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"math"
 	"slices"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/jclc/waylander/common"
+	"golang.org/x/exp/maps"
 )
 
 const epsilon = 0.005
