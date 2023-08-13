@@ -14,6 +14,8 @@ You can save the current screen layout as a profile with `waylander save <profil
 
 Print the full command set with `waylander help`.
 
+Profiles are saved in `($XDG_CONFIG_HOME | ~/.config)/waylander/profiles`.
+
 ## Motivation
 I frequently switch my monitor setup between my desktop monitor and TV. Previously I used some `xrandr` scripts, but switched to Wayland some time ago. I wasn't happy with the existing replacements for Wayland so I decided to make something better for myself. I may keep adding extra features to this if I feel like it.
 
