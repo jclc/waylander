@@ -33,6 +33,7 @@ func Usage() {
 			"    apply [opts] <profile>   Apply profile\n"+
 			"      -persist               Make profile persistent\n"+
 			"      -verify                Ask for confirmation\n"+
+			"    delete <profile>         Delete profile\n"+
 			"    edit <profile>           Edit profile\n"+
 			"    debuginfo                Print desktop session internal info\n"+
 			"", filepath.Base(os.Args[0]))
@@ -57,6 +58,8 @@ func Run() int {
 		return RunShow(os.Args[2:])
 	case "edit":
 		return RunEdit(os.Args[2:])
+	case "delete":
+		return RunDelete(os.Args[2:])
 	}
 
 	var err error
@@ -289,6 +292,26 @@ func RunApply(args []string) int {
 	err = session.Apply(profile, verify, persist)
 	if err != nil {
 		fmt.Println("Error applying profile:", err)
+		return 1
+	}
+
+	return 0
+}
+
+func RunDelete(args []string) int {
+	if len(args) == 0 {
+		fmt.Println("Specify a profile to delete")
+		return 1
+	}
+
+	if !slices.Contains(getProfiles(), args[0]) {
+		fmt.Printf("Profile '%s' does not exist\n", args[0])
+		return 1
+	}
+
+	err := os.Remove(getProfilePath(args[0]))
+	if err != nil {
+		fmt.Println("Error deleting profile:", err)
 		return 1
 	}
 
