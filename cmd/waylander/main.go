@@ -92,7 +92,7 @@ func GetDesktopSession() (common.DesktopSession, error) {
 	// Detect current desktop session
 	session := os.Getenv("DESKTOP_SESSION")
 	switch session {
-	case "gnome":
+	case "gnome", "gnome-xorg":
 		return mutter.GetDesktopSession()
 	}
 	return nil, fmt.Errorf("unsupported desktop session '%s'", session)

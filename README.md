@@ -21,11 +21,13 @@ I frequently switch my monitor setup between my desktop monitor and TV. Previous
 
 ## Supported platforms (so far)
 - Gnome Wayland
+- Gnome Xorg
 
 ## Todo list
 - [X] Basic documentation
 - [X] Ensure cloning works properly
 - [ ] KDE support
+- [ ] Cross-DE compatible profiles
 
 ## Stretch goals
 - [ ] GUI
