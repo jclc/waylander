@@ -4,22 +4,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sync"
 )
 
 const configSubDir = "waylander"
 
 var configPath string
-var configPathMutex sync.Mutex
 
-func GetConfigDir() string {
-	configPathMutex.Lock()
-	defer configPathMutex.Unlock()
-
-	if configPath != "" {
-		return configPath
-	}
-
+func init() {
 	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
 		configPath = filepath.Join(xdgConfig, configSubDir)
 	} else if home := os.Getenv("HOME"); home != "" {
@@ -27,7 +18,9 @@ func GetConfigDir() string {
 	} else {
 		panic(errors.New("couldn't determine config directory"))
 	}
+}
 
+func EnsureConfigDir() {
 	err := os.MkdirAll(configPath, 0755)
 	if err != nil {
 		panic(err)
@@ -36,5 +29,8 @@ func GetConfigDir() string {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func GetConfigDir() string {
 	return configPath
 }

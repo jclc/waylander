@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/jclc/waylander/common"
 	"github.com/jclc/waylander/mutter"
@@ -105,7 +106,9 @@ func getProfilePath(name string) string {
 
 func getProfiles() []string {
 	files, err := os.ReadDir(filepath.Join(common.GetConfigDir(), "profiles"))
-	if err != nil {
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
 		fmt.Println("Error reading profiles:", err)
 		os.Exit(1)
 	}
@@ -119,6 +122,11 @@ func getProfiles() []string {
 	}
 
 	return profiles
+}
+
+// validProfileName returns false if the given name is not valid for a profile
+func validProfileName(profile string) bool {
+	return !strings.ContainsAny(profile, `/\:;`)
 }
 
 func RunDebugInfo(args []string) int {
@@ -160,11 +168,6 @@ func RunState(args []string) int {
 func RunProfiles(args []string) int {
 	profiles := getProfiles()
 
-	if len(profiles) == 0 {
-		fmt.Println("No saved profiles")
-		return 0
-	}
-
 	for _, p := range profiles {
 		fmt.Println(p)
 	}
@@ -174,6 +177,11 @@ func RunProfiles(args []string) int {
 func RunSave(args []string) int {
 	if len(args) != 1 || args[0] == "" {
 		fmt.Println("Give the profile a name")
+		return 1
+	}
+
+	if !validProfileName(args[0]) {
+		fmt.Println("Invalid profile name")
 		return 1
 	}
 
@@ -187,6 +195,7 @@ func RunSave(args []string) int {
 		Monitors: monitors,
 	}
 
+	common.EnsureConfigDir()
 	file, err := os.Create(getProfilePath(args[0]))
 	if err != nil {
 		fmt.Println("Error creating profile:", err)
@@ -208,6 +217,11 @@ func RunSave(args []string) int {
 func RunShow(args []string) int {
 	if len(args) == 0 {
 		fmt.Println("Specify a profile to show")
+		return 1
+	}
+
+	if !validProfileName(args[0]) {
+		fmt.Println("Invalid profile name")
 		return 1
 	}
 
@@ -234,11 +248,17 @@ func RunEdit(args []string) int {
 		return 1
 	}
 
+	if !validProfileName(args[0]) {
+		fmt.Println("Invalid profile name")
+		return 1
+	}
+
 	if len(args) != 1 {
 		fmt.Println("Specify which profile to edit")
 		return 1
 	}
 
+	common.EnsureConfigDir()
 	cmd := exec.Command(editor, getProfilePath(args[0]))
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -268,6 +288,11 @@ func RunApply(args []string) int {
 
 	if len(args) != 1 {
 		fmt.Println("Specify which profile to apply")
+		return 1
+	}
+
+	if !validProfileName(args[0]) {
+		fmt.Println("Invalid profile name")
 		return 1
 	}
 
@@ -304,11 +329,17 @@ func RunDelete(args []string) int {
 		return 1
 	}
 
+	if !validProfileName(args[0]) {
+		fmt.Println("Invalid profile name")
+		return 1
+	}
+
 	if !slices.Contains(getProfiles(), args[0]) {
 		fmt.Printf("Profile '%s' does not exist\n", args[0])
 		return 1
 	}
 
+	common.EnsureConfigDir()
 	err := os.Remove(getProfilePath(args[0]))
 	if err != nil {
 		fmt.Println("Error deleting profile:", err)

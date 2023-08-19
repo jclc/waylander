@@ -83,6 +83,6 @@ type State struct {
 
 // Resources is the output of the resources command
 type Resources struct {
-	// Monitors maps connector to connected physical monitors
+	// Monitors maps connectors to connected physical monitors
 	Monitors map[string]PhysicalMonitor `json:"monitors"`
 }
