@@ -12,7 +12,13 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-const epsilon = 0.005
+const (
+	epsilon          = 0.005
+	preferredString  = "is-preferred"
+	currentString    = "is-current"
+	vrrCapableString = "is-vrr-allowed"
+	vrrEnabledString = "allow_vrr"
+)
 
 func GetDesktopSession() (common.DesktopSession, error) {
 	conn, err := dbus.SessionBus()
@@ -48,9 +54,10 @@ func (s *session) Resources() (common.Resources, error) {
 	}
 	for _, o := range s.st.Monitors {
 		mon := common.PhysicalMonitor{
-			Vendor:  o.Info.Vendor,
-			Product: o.Info.Product,
-			Serial:  o.Info.Serial,
+			Vendor:     o.Info.Vendor,
+			Product:    o.Info.Product,
+			Serial:     o.Info.Serial,
+			Properties: map[string]any{},
 		}
 
 		mon.Modes = make([]common.Mode, 0, len(o.Modes))
@@ -64,16 +71,16 @@ func (s *session) Resources() (common.Resources, error) {
 			}
 			mon.Modes = append(mon.Modes, newMode)
 
-			if isPreferred, found := mode.Properties["is-preferred"]; found {
+			if isPreferred, found := mode.Properties[preferredString]; found {
 				if is, ok := isPreferred.(bool); ok && is {
 					mon.PreferredMode = newMode
 				}
 			}
 		}
 
-		if supportsVRR, found := o.Properties["is-vrr-allowed"]; found {
+		if supportsVRR, found := o.Properties[vrrCapableString]; found {
 			if does, ok := supportsVRR.(bool); ok && does {
-				mon.VRRSupported = true
+				mon.Properties[common.PropertyVRRSupported] = true
 			}
 		}
 
@@ -91,7 +98,7 @@ func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 	currentModes := map[string]stMode{}
 	for _, s := range s.st.Monitors {
 		for _, m := range s.Modes {
-			if isCurrent, found := m.Properties["is-current"]; found && isCurrent.(bool) {
+			if isCurrent, found := m.Properties[currentString]; found && isCurrent.(bool) {
 				currentModes[s.Info.Connector] = m
 				break
 			}
@@ -163,9 +170,15 @@ func (s *session) Apply(profile common.Profile, verify, persistent bool) error {
 			var id string
 			id, scale = s.findModeID(connector, mon.Outputs[connector], mon.Scale)
 
+			vrrEnabled := common.GetBoolProperty(
+				mon.Properties, common.PropertyVRREnabled)
+
 			monitors = append(monitors, applyMonitor{
 				Connector: connector,
 				ModeID:    id,
+				Properties: map[string]any{
+					vrrEnabledString: vrrEnabled,
+				},
 			})
 		}
 		outputMonitors = append(outputMonitors, applyLogicalMonitor{

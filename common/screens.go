@@ -10,6 +10,11 @@ const (
 	Epsilon                      = 0.005 // for comparing floats
 )
 
+const (
+	PropertyVRRSupported = "vrr_supported"
+	PropertyVRREnabled   = "vrr_enabled"
+)
+
 type Mode struct {
 	Dimensions Rect    `json:"dimensions"`
 	Frequency  float64 `json:"frequency"`
@@ -49,20 +54,49 @@ type LogicalMonitor struct {
 	Orientation Orientation     `json:"orientation"`
 	Offset      Rect            `json:"offset"`
 	Primary     bool            `json:"primary"`
-	VRREnabled  bool            `json:"vrr_enabled"` // variable refresh rate
+	Properties  map[string]any  `json:"properties,omitempty"`
 }
 
 // PhysicalMonitor represents one connected physical monitor output.
 type PhysicalMonitor struct {
-	Vendor        string `json:"vendor"`
-	Product       string `json:"product"`
-	Serial        string `json:"serial"`
-	PreferredMode Mode   `json:"preferred_mode"`
-	Modes         []Mode `json:"modes"`
-	VRRSupported  bool   `json:"vrr_supported"` // variable refresh rate
+	Vendor        string         `json:"vendor"`
+	Product       string         `json:"product"`
+	Serial        string         `json:"serial"`
+	PreferredMode Mode           `json:"preferred_mode"`
+	Modes         []Mode         `json:"modes"`
+	Properties    map[string]any `json:"properties,omitempty"`
 }
 
 // Profile represents a complete monitor layout.
 type Profile struct {
 	Monitors []LogicalMonitor `json:"monitors"`
+}
+
+// GetProperty checks if the properties contains a specific value with the
+// correct type
+func GetProperty[T any](props map[string]any, key string) (T, bool) {
+	v, ok := props[key]
+	if !ok {
+		var t T
+		return t, false
+	}
+
+	t, ok := v.(T)
+	if !ok {
+		var t T
+		return t, false
+	}
+
+	return t, true
+}
+
+// GetBoolProperty returns the boolean property's value, false if not found
+func GetBoolProperty(props map[string]any, key string) bool {
+	v, ok := props[key]
+	if !ok {
+		return false
+	}
+
+	b, ok := v.(bool)
+	return ok && b
 }
