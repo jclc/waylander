@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/alessio/shellescape"
 	"github.com/jclc/waylander/common"
 	"github.com/jclc/waylander/mutter"
 )
@@ -28,7 +29,8 @@ func Usage() {
 			"    help                     Print this help message\n"+
 			"    resources                Show currently connected outputs\n"+
 			"    state                    Show the current configuration\n"+
-			"    profiles                 List saved profiles\n"+
+			"    profiles [opts]          List saved profiles\n"+
+			"      -shell                 Print in a shell-friendly format\n"+
 			"    save <profile>           Save current state as a profile\n"+
 			"    show <profile>           Show profile\n"+
 			"    apply [opts] <profile>   Apply profile\n"+
@@ -62,6 +64,12 @@ func Run() int {
 	case "delete":
 		return RunDelete(os.Args[2:])
 	}
+
+	if err := GetLock(); err != nil {
+		fmt.Println("Fatal error:", err)
+		return 1
+	}
+	defer ReleaseLock()
 
 	var err error
 	session, err = GetDesktopSession()
@@ -126,7 +134,7 @@ func getProfiles() []string {
 
 // validProfileName returns false if the given name is not valid for a profile
 func validProfileName(profile string) bool {
-	return !strings.ContainsAny(profile, `/\:;`)
+	return len(profile) > 0 && !strings.ContainsAny(profile, `/\:;`)
 }
 
 func RunDebugInfo(args []string) int {
@@ -166,21 +174,40 @@ func RunState(args []string) int {
 }
 
 func RunProfiles(args []string) int {
+	set := flag.NewFlagSet("", flag.ContinueOnError)
+	var shell bool
+	set.BoolVar(&shell, "shell", false,
+		"Print profile names in a shell-friendly format")
+
+	err := set.Parse(args)
+	if err != nil {
+		return 1
+	}
+
 	profiles := getProfiles()
 
+	print := fmt.Println
+	if shell {
+		print = func(a ...any) (int, error) {
+			return fmt.Println(shellescape.Quote(a[0].(string)))
+		}
+	}
+
 	for _, p := range profiles {
-		fmt.Println(p)
+		_, _ = print(p)
 	}
 	return 0
 }
 
 func RunSave(args []string) int {
-	if len(args) != 1 || args[0] == "" {
+	if len(args) < 1 || args[0] == "" {
 		fmt.Println("Give the profile a name")
 		return 1
 	}
 
-	if !validProfileName(args[0]) {
+	profileName := strings.TrimSpace(args[0])
+
+	if !validProfileName(profileName) {
 		fmt.Println("Invalid profile name")
 		return 1
 	}
@@ -196,7 +223,7 @@ func RunSave(args []string) int {
 	}
 
 	common.EnsureConfigDir()
-	file, err := os.Create(getProfilePath(args[0]))
+	file, err := os.Create(getProfilePath(profileName))
 	if err != nil {
 		fmt.Println("Error creating profile:", err)
 		return 1

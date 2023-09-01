@@ -72,9 +72,9 @@ type Profile struct {
 	Monitors []LogicalMonitor `json:"monitors"`
 }
 
-// GetProperty checks if the properties contains a specific value with the
-// correct type
-func GetProperty[T any](props map[string]any, key string) (T, bool) {
+// FindProperty checks if the properties contains a specific value with the
+// correct type and returns true as the second argument if it was found.
+func FindProperty[T any](props map[string]any, key string) (T, bool) {
 	v, ok := props[key]
 	if !ok {
 		var t T
@@ -82,21 +82,22 @@ func GetProperty[T any](props map[string]any, key string) (T, bool) {
 	}
 
 	t, ok := v.(T)
-	if !ok {
-		var t T
-		return t, false
-	}
-
-	return t, true
+	return t, ok
 }
 
-// GetBoolProperty returns the boolean property's value, false if not found
-func GetBoolProperty(props map[string]any, key string) bool {
-	v, ok := props[key]
-	if !ok {
-		return false
+// GetProperty returns the value of the property, false/zero value if not found.
+func GetProperty[T any](props map[string]any, key string) T {
+	t, _ := FindProperty[T](props, key)
+	return t
+}
+
+// GetProperty returns the value of the property or the given default if
+// not found.
+func GetPropertyDefault[T any](props map[string]any, key string, def T) T {
+	t, found := FindProperty[T](props, key)
+	if found {
+		return t
 	}
 
-	b, ok := v.(bool)
-	return ok && b
+	return def
 }

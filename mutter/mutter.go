@@ -71,18 +71,13 @@ func (s *session) Resources() (common.Resources, error) {
 			}
 			mon.Modes = append(mon.Modes, newMode)
 
-			if isPreferred, found := mode.Properties[preferredString]; found {
-				if is, ok := isPreferred.(bool); ok && is {
-					mon.PreferredMode = newMode
-				}
+			if common.GetProperty[bool](mode.Properties, preferredString) {
+				mon.PreferredMode = newMode
 			}
 		}
 
-		if supportsVRR, found := o.Properties[vrrCapableString]; found {
-			if does, ok := supportsVRR.(bool); ok && does {
-				mon.Properties[common.PropertyVRRSupported] = true
-			}
-		}
+		mon.Properties[common.PropertyVRRSupported] = common.GetProperty[bool](
+			o.Properties, vrrCapableString)
 
 		res.Monitors[o.Info.Connector] = mon
 	}
@@ -98,7 +93,7 @@ func (s *session) ScreenStates() ([]common.LogicalMonitor, error) {
 	currentModes := map[string]stMode{}
 	for _, s := range s.st.Monitors {
 		for _, m := range s.Modes {
-			if isCurrent, found := m.Properties[currentString]; found && isCurrent.(bool) {
+			if common.GetProperty[bool](m.Properties, currentString) {
 				currentModes[s.Info.Connector] = m
 				break
 			}
@@ -170,14 +165,13 @@ func (s *session) Apply(profile common.Profile, verify, persistent bool) error {
 			var id string
 			id, scale = s.findModeID(connector, mon.Outputs[connector], mon.Scale)
 
-			vrrEnabled := common.GetBoolProperty(
-				mon.Properties, common.PropertyVRREnabled)
-
 			monitors = append(monitors, applyMonitor{
 				Connector: connector,
 				ModeID:    id,
 				Properties: map[string]any{
-					vrrEnabledString: vrrEnabled,
+					vrrEnabledString: common.GetProperty[bool](
+						mon.Properties, common.PropertyVRREnabled,
+					),
 				},
 			})
 		}
