@@ -65,6 +65,10 @@ The `$EDITOR` environment variable is used to determine the editor.
 
 Print all available commands.
 
+## GUI scripts
+
+If `waylander` is installed in `$PATH`, the included utility scripts can be used for some basic GUI controls.
+
 ## Motivation
 I frequently switch my monitor setup between my desktop monitor and TV. Previously I used some `xrandr` scripts, but switched to Wayland some time ago. I wasn't happy with the existing replacements for Wayland so I decided to make something better for myself. I may keep adding extra features to this if I feel like it.
 

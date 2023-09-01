@@ -3,6 +3,12 @@
 IFS="
 "
 profiles=($(waylander profiles))
+
+if [[ "${#profiles[@]}" -eq 1 && -z "${profiles[0]}" ]]; then
+	zenity --info --title="waylander" --text="No saved profiles."
+	exit
+fi
+
 profiles_zen=()
 for p in "${profiles[@]}"; do
 	profiles_zen+=("FALSE")

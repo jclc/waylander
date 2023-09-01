@@ -4,6 +4,11 @@ IFS="
 "
 profiles=$(waylander profiles)
 
+if [[ "${#profiles[@]}" -eq 1 && -z "${profiles[0]}" ]]; then
+	zenity --info --title="waylander" --text="No saved profiles."
+	exit
+fi
+
 selected=$(zenity --list --title="waylander" --text="Select monitor layout" \
 	--column="Profile" $profiles)
 if [[ $? -ne 0 ]]; then
