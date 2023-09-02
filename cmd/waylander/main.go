@@ -134,7 +134,7 @@ func getProfiles() []string {
 
 // validProfileName returns false if the given name is not valid for a profile
 func validProfileName(profile string) bool {
-	return len(profile) > 0 && !strings.ContainsAny(profile, `/\:;`)
+	return len(profile) > 0 && !strings.ContainsAny(profile, "/\\:;\n\t\r")
 }
 
 func RunDebugInfo(args []string) int {
